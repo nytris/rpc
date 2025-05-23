@@ -1,0 +1,46 @@
+{
+    "name": "nytris/rpc",
+    "type": "project",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Nytris\\Rpc\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Nytris\\Rpc\\Tests\\": "tests/"
+        }
+    },
+    "require": {
+        "php": ">=8.1",
+        "nytris/nytris": "^0.1",
+        "react/child-process": "^0.6.6",
+        "react/stream": "^1.4"
+    },
+    "require-dev": {
+        "asmblah/fast-cgi": "^0.1",
+        "mockery/mockery": "1.6.11",
+        "phpstan/phpstan": "^1.10",
+        "phpstan/phpstan-mockery": "^1.1",
+        "phpunit/phpunit": "^10.2",
+        "react/http": "^1.11",
+        "react/socket": "^1.16",
+        "symfony/filesystem": "^5.4",
+        "symfony/http-foundation": "^5.4",
+        "symfony/http-kernel": "^5.4",
+        "tasque/event-loop": "^0.1",
+        "tasque/tasque": "^0.1"
+    },
+    "scripts": {
+        "test": "composer phpstan && composer phpunit",
+        "phpunit": "vendor/bin/phpunit",
+        "phpstan": "vendor/bin/phpstan"
+    },
+    "config": {
+        "platform": {
+            "php": "8.1"
+        },
+        "sort-packages": true
+    }
+}
