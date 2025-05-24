@@ -202,6 +202,14 @@ class MyCommandHandler implements HandlerInterface
 }
 ```
 
+### Error/exception handling
+
+Exceptions raised while handling an RPC call will be checked for whether they implement
+the `Nytris\Rpc\Exception\SerialisableExceptionInterface` interface.
+If they do, they will be serialised using its `->serialise()` method, allowing the Promise received
+by the caller to receive an instance of the specific exception class.
+Otherwise, an instance of `Nytris\Rpc\Exception\ProxyException` will be used.
+
 ## Advanced usage
 
 ### Custom framing protocol

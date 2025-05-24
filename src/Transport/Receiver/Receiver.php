@@ -13,9 +13,11 @@ declare(strict_types=1);
 
 namespace Nytris\Rpc\Transport\Receiver;
 
-use Exception;
 use Nytris\Rpc\Call\CallTableInterface;
 use Nytris\Rpc\Dispatcher\DispatcherInterface;
+use Nytris\Rpc\Exception\DeserialisationFailedException;
+use Nytris\Rpc\Exception\ProxyException;
+use Nytris\Rpc\Exception\SerialisableExceptionInterface;
 use Nytris\Rpc\Transport\Message\MessageType;
 use Nytris\Rpc\Transport\Transmitter\TransmitterInterface;
 use React\Promise\PromiseInterface;
@@ -78,7 +80,7 @@ class Receiver implements ReceiverInterface
                         $payload['method'],
                         $payload['args']
                     );
-                } catch (Exception $exception) {
+                } catch (Throwable $exception) {
                     $this->returnError($callId, $exception);
                     return;
                 }
@@ -107,7 +109,22 @@ class Receiver implements ReceiverInterface
                  * An error for a call to the remote end was received from the remote endpoint,
                  * that should be rejected locally to provide it back to the local caller.
                  */
-                $this->callTable->throw(callId: $payload['callId'], exception: $payload['exception']);
+                $exceptionClass = $payload['exception']['class'] ?? null;
+
+                if ($exceptionClass === null) {
+                    throw new DeserialisationFailedException('Exception class missing');
+                }
+
+                if (!is_subclass_of($exceptionClass, SerialisableExceptionInterface::class)) {
+                    throw new DeserialisationFailedException(sprintf(
+                        'Exception class "%s" does not implement SerialisableExceptionInterface',
+                        $exceptionClass
+                    ));
+                }
+
+                $exception = $exceptionClass::deserialise($payload['exception']['data']);
+
+                $this->callTable->throw(callId: $payload['callId'], exception: $exception);
                 break;
         }
     }
@@ -128,9 +145,20 @@ class Receiver implements ReceiverInterface
 
     private function returnError(int $callId, Throwable $exception): void
     {
+        if (!$exception instanceof SerialisableExceptionInterface) {
+            // Exception is not serialisable, so wrap its details in a ProxyException, which is.
+            $exception = new ProxyException(
+                originalClass: $exception::class,
+                originalMessage: $exception->getMessage(),
+                originalCode: $exception->getCode(),
+                originalFile: $exception->getFile(),
+                originalLine: $exception->getLine()
+            );
+        }
+
         $this->transmitter->transmit(type: MessageType::ERROR, payload: [
             'callId' => $callId,
-            'exception' => $exception,
+            'exception' => ['class' => $exception::class, 'data' => $exception->serialise()],
         ]);
     }
 

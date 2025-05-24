@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 namespace Nytris\Rpc\Transport\Receiver;
 
+use Nytris\Rpc\Exception\RpcExceptionInterface;
 use Nytris\Rpc\Transport\Message\MessageType;
 
 /**
@@ -35,6 +36,7 @@ interface ReceiverInterface
      *
      * @param MessageType $type Message type received.
      * @param array<mixed> $payload Message payload.
+     * @throws RpcExceptionInterface
      */
     public function receive(MessageType $type, array $payload): void;
 

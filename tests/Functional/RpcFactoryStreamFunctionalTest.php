@@ -14,12 +14,16 @@ declare(strict_types=1);
 namespace Nytris\Rpc\Tests\Functional;
 
 use BadMethodCallException;
+use Nytris\Rpc\Exception\ProxyException;
 use Nytris\Rpc\Handler\HandlerInterface;
 use Nytris\Rpc\RpcFactory;
 use Nytris\Rpc\RpcInterface;
 use Nytris\Rpc\Tests\AbstractTestCase;
+use Nytris\Rpc\Tests\Functional\Fixtures\TestSerialisableException;
 use React\Stream\ThroughStream;
+use RuntimeException;
 use Tasque\EventLoop\TasqueEventLoop;
+use Throwable;
 
 /**
  * Class RpcFactoryFunctionalTest.
@@ -52,6 +56,16 @@ class RpcFactoryStreamFunctionalTest extends AbstractTestCase
             public function add(int $a, int $b): int
             {
                 return $a + $b;
+            }
+
+            public function failSerialisable(): void
+            {
+                throw new TestSerialisableException('Bang!');
+            }
+
+            public function failNonSerialisable(): void
+            {
+                throw new RuntimeException('Bang!', 123);
             }
 
             public function onUndefinedMethod(string $method, array $args): mixed
@@ -94,5 +108,47 @@ class RpcFactoryStreamFunctionalTest extends AbstractTestCase
         $this->clientRpc->start();
 
         static::assertSame('Hello, World!', TasqueEventLoop::await($promise));
+    }
+
+    public function testNonSerialisableExceptionsDuringCallHandlingAreReturnedAndThrownAsProxyExceptions(): void
+    {
+        $capturedException = null;
+        $this->serverRpc->start();
+        $this->clientRpc->start();
+
+        $promise = $this->clientRpc->call($this->handler::class, 'failNonSerialisable');
+
+        try {
+            TasqueEventLoop::await($promise);
+        } catch (Throwable $exception) {
+            $capturedException = $exception;
+        }
+
+        static::assertInstanceOf(ProxyException::class, $capturedException);
+        static::assertSame('RPC exception :: RuntimeException: Bang!', $capturedException->getMessage());
+        static::assertSame('RuntimeException', $capturedException->getOriginalClass());
+        static::assertSame('Bang!', $capturedException->getOriginalMessage());
+        static::assertSame(123, $capturedException->getOriginalCode());
+        static::assertSame(__FILE__, $capturedException->getOriginalFile());
+        static::assertSame(68, $capturedException->getOriginalLine());
+    }
+
+    public function testSerialisableExceptionsDuringCallHandlingAreReturnedAndThrown(): void
+    {
+        $capturedException = null;
+        $this->serverRpc->start();
+        $this->clientRpc->start();
+
+        $promise = $this->clientRpc->call($this->handler::class, 'failSerialisable');
+
+        try {
+            TasqueEventLoop::await($promise);
+        } catch (Throwable $exception) {
+            $capturedException = $exception;
+        }
+
+        static::assertInstanceOf(TestSerialisableException::class, $capturedException);
+        // Ensure the deserialisation hook was used.
+        static::assertSame('Bang! (deserialised)', $capturedException->getMessage());
     }
 }

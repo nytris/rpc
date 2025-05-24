@@ -13,7 +13,7 @@ declare(strict_types=1);
 
 namespace Nytris\Rpc\Call;
 
-use Exception;
+use Throwable;
 
 /**
  * Interface CallTableInterface.
@@ -39,5 +39,5 @@ interface CallTableInterface
     /**
      * Called with the exception when the call was unsuccessful.
      */
-    public function throw(int $callId, Exception $exception): void;
+    public function throw(int $callId, Throwable $exception): void;
 }

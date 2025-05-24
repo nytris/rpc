@@ -18,11 +18,15 @@ use Mockery;
 use Mockery\MockInterface;
 use Nytris\Rpc\Call\CallTableInterface;
 use Nytris\Rpc\Dispatcher\DispatcherInterface;
+use Nytris\Rpc\Exception\DeserialisationFailedException;
+use Nytris\Rpc\Exception\ProxyException;
 use Nytris\Rpc\Tests\AbstractTestCase;
+use Nytris\Rpc\Tests\Functional\Fixtures\TestSerialisableException;
 use Nytris\Rpc\Transport\Message\MessageType;
 use Nytris\Rpc\Transport\Receiver\Receiver;
 use Nytris\Rpc\Transport\Transmitter\TransmitterInterface;
 use React\Promise\PromiseInterface;
+use RuntimeException;
 
 /**
  * Class ReceiverTest.
@@ -107,11 +111,11 @@ class ReceiverTest extends AbstractTestCase
             'callId' => 123,
             'handlerFqcn' => 'MyHandler',
             'method' => 'myMethod',
-            'args' => ['arg1', 'arg2']
+            'args' => ['arg1', 'arg2'],
         ]);
     }
 
-    public function testReceiveHandlesCallMessagesThatCauseExceptionsToBeRaised(): void
+    public function testReceiveHandlesCallMessagesThatCauseProxyExceptionsToBeRaised(): void
     {
         $this->receiver->resume();
         $exception = new Exception('Something went wrong');
@@ -122,8 +126,20 @@ class ReceiverTest extends AbstractTestCase
             ->andThrow($exception);
         $this->transmitter->expects('transmit')
             ->with(
-                Mockery::on(fn ($type) => $type === MessageType::ERROR),
-                ['callId' => 456, 'exception' => $exception]
+                MessageType::ERROR,
+                [
+                    'callId' => 456,
+                    'exception' => [
+                        'class' => ProxyException::class,
+                        'data' => [
+                            'originalClass' => $exception::class,
+                            'originalMessage' => $exception->getMessage(),
+                            'originalCode' => $exception->getCode(),
+                            'originalFile' => $exception->getFile(),
+                            'originalLine' => $exception->getLine(),
+                        ],
+                    ],
+                ]
             )
             ->once();
 
@@ -131,7 +147,37 @@ class ReceiverTest extends AbstractTestCase
             'callId' => 456,
             'handlerFqcn' => 'MyHandler',
             'method' => 'failingMethod',
-            'args' => []
+            'args' => [],
+        ]);
+    }
+
+    public function testReceiveHandlesCallMessagesThatCauseSerialisableExceptionsToBeRaised(): void
+    {
+        $this->receiver->resume();
+        $exception = new TestSerialisableException('Something went wrong');
+
+        $this->dispatcher->expects()
+            ->dispatch('MyHandler', 'failingMethod', [])
+            ->once()
+            ->andThrow($exception);
+        $this->transmitter->expects('transmit')
+            ->with(
+                MessageType::ERROR,
+                [
+                    'callId' => 456,
+                    'exception' => [
+                        'class' => $exception::class,
+                        'data' => ['myMessage' => 'Something went wrong'],
+                    ],
+                ]
+            )
+            ->once();
+
+        $this->receiver->receive(MessageType::CALL, [
+            'callId' => 456,
+            'handlerFqcn' => 'MyHandler',
+            'method' => 'failingMethod',
+            'args' => [],
         ]);
     }
 
@@ -163,7 +209,7 @@ class ReceiverTest extends AbstractTestCase
             'callId' => 789,
             'handlerFqcn' => 'MyHandler',
             'method' => 'promiseMethod',
-            'args' => ['arg1']
+            'args' => ['arg1'],
         ]);
     }
 
@@ -171,7 +217,7 @@ class ReceiverTest extends AbstractTestCase
     {
         $this->receiver->resume();
         $promise = mock(PromiseInterface::class);
-        $exception = new Exception('Bang!');
+        $exception = new RuntimeException('Bang!');
 
         $promise->expects('then')
             ->andReturnUsing(function (callable $resolve, callable $reject) use ($promise, $exception) {
@@ -186,8 +232,20 @@ class ReceiverTest extends AbstractTestCase
             ->andReturn($promise);
         $this->transmitter->expects('transmit')
             ->with(
-                Mockery::on(fn ($type) => $type === MessageType::ERROR),
-                ['callId' => 789, 'exception' => $exception]
+                MessageType::ERROR,
+                [
+                    'callId' => 789,
+                    'exception' => [
+                        'class' => ProxyException::class,
+                        'data' => [
+                            'originalClass' => $exception::class,
+                            'originalMessage' => $exception->getMessage(),
+                            'originalCode' => $exception->getCode(),
+                            'originalFile' => $exception->getFile(),
+                            'originalLine' => $exception->getLine(),
+                        ],
+                    ],
+                ]
             )
             ->once();
 
@@ -195,7 +253,7 @@ class ReceiverTest extends AbstractTestCase
             'callId' => 789,
             'handlerFqcn' => 'MyHandler',
             'method' => 'promiseMethod',
-            'args' => ['arg1']
+            'args' => ['arg1'],
         ]);
     }
 
@@ -217,13 +275,21 @@ class ReceiverTest extends AbstractTestCase
         ]);
     }
 
-    public function testReceiveHandlesErrorMessages(): void
+    public function testReceiveHandlesErrorMessagesWithSerialisableException(): void
     {
         $this->receiver->resume();
-        $exception = new Exception('Something went wrong');
 
-        $this->callTable->expects()
-            ->throw(456, $exception)
+        $this->callTable->expects('throw')
+            ->with(
+                456,
+                Mockery::on(function (TestSerialisableException $exception) {
+                    static::assertSame(
+                        'Something went wrong (deserialised)',
+                        $exception->getMessage()
+                    );
+                    return true;
+                })
+            )
             ->once();
         $this->dispatcher->expects('dispatch')
             ->never();
@@ -232,7 +298,99 @@ class ReceiverTest extends AbstractTestCase
 
         $this->receiver->receive(MessageType::ERROR, [
             'callId' => 456,
-            'exception' => $exception
+            'exception' => [
+                'class' => TestSerialisableException::class,
+                'data' => ['myMessage' => 'Something went wrong'],
+            ]
+        ]);
+    }
+
+    public function testReceiveHandlesErrorMessagesWithProxyException(): void
+    {
+        $this->receiver->resume();
+
+        $this->callTable->expects('throw')
+            ->with(
+                456,
+                Mockery::on(function (ProxyException $exception) {
+                    static::assertSame(
+                        'RPC exception :: MyNonSerialisableException: Something went wrong',
+                        $exception->getMessage()
+                    );
+                    static::assertSame(
+                        'Something went wrong',
+                        $exception->getOriginalMessage()
+                    );
+                    static::assertSame(123, $exception->getOriginalCode());
+                    static::assertSame('/path/to/my_file.php', $exception->getOriginalFile());
+                    static::assertSame(456, $exception->getOriginalLine());
+                    return true;
+                })
+            )
+            ->once();
+        $this->dispatcher->expects('dispatch')
+            ->never();
+        $this->transmitter->expects('transmit')
+            ->never();
+
+        $this->receiver->receive(MessageType::ERROR, [
+            'callId' => 456,
+            'exception' => [
+                'class' => ProxyException::class,
+                'data' => [
+                    'originalClass' => 'MyNonSerialisableException',
+                    'originalMessage' => 'Something went wrong',
+                    'originalCode' => 123,
+                    'originalFile' => '/path/to/my_file.php',
+                    'originalLine' => 456,
+                ],
+            ],
+        ]);
+    }
+
+    public function testReceiveHandlesErrorMessagesWithMissingExceptionClass(): void
+    {
+        $this->receiver->resume();
+
+        $this->expectException(DeserialisationFailedException::class);
+        $this->expectExceptionMessage('Exception class missing');
+
+        $this->receiver->receive(MessageType::ERROR, [
+            'callId' => 456,
+            'exception' => ['data' => []],
+        ]);
+    }
+
+    public function testReceiveHandlesErrorMessagesWithInvalidExceptionClass(): void
+    {
+        $this->receiver->resume();
+
+        $this->expectException(DeserialisationFailedException::class);
+        $this->expectExceptionMessage(
+            'Exception class "MyInvalidExceptionClass" does not implement SerialisableExceptionInterface'
+        );
+
+        $this->receiver->receive(MessageType::ERROR, [
+            'callId' => 456,
+            'exception' => [
+                'class' => 'MyInvalidExceptionClass',
+                'data' => [],
+            ],
+        ]);
+    }
+
+    public function testReceiveQueuesMessagesByDefault(): void
+    {
+        $this->dispatcher->expects('dispatch')
+            ->never();
+        $this->transmitter->expects('transmit')
+            ->never();
+
+        $this->receiver->receive(MessageType::CALL, [
+            'callId' => 123,
+            'handlerFqcn' => 'MyHandler',
+            'method' => 'myMethod',
+            'args' => ['first'],
         ]);
     }
 

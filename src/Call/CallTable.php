@@ -14,7 +14,7 @@ declare(strict_types=1);
 namespace Nytris\Rpc\Call;
 
 use BadMethodCallException;
-use Exception;
+use Throwable;
 
 /**
  * Class CallTable.
@@ -24,7 +24,7 @@ use Exception;
 class CallTable implements CallTableInterface
 {
     /**
-     * @var array<int, array{onReturn: (callable(mixed): void), onThrow: (callable(Exception): void)}>
+     * @var array<int, array{onReturn: (callable(mixed): void), onThrow: (callable(Throwable): void)}>
      */
     private array $callIdToCallablesMap = [];
     private int $nextCallId = 0;
@@ -62,7 +62,7 @@ class CallTable implements CallTableInterface
     /**
      * @inheritDoc
      */
-    public function throw(int $callId, Exception $exception): void
+    public function throw(int $callId, Throwable $exception): void
     {
         $callables = $this->callIdToCallablesMap[$callId] ?? null;
         unset($this->callIdToCallablesMap[$callId]);
