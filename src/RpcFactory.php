@@ -15,7 +15,6 @@ namespace Nytris\Rpc;
 
 use Nytris\Rpc\Call\CallTable;
 use Nytris\Rpc\Dispatcher\Dispatcher;
-use Nytris\Rpc\Handler\HandlerInterface;
 use Nytris\Rpc\Transport\Frame\FramingProtocolInterface;
 use Nytris\Rpc\Transport\Frame\SerializeBasedFramingProtocol;
 use Nytris\Rpc\Transport\Listener\StreamListener;
@@ -33,7 +32,7 @@ use React\Stream\WritableStreamInterface;
  *
  * @author Dan Phillimore <dan@ovms.co>
  */
-class RpcFactory
+class RpcFactory implements RpcFactoryInterface
 {
     public function __construct(
         private readonly FramingProtocolInterface $framingProtocol = new SerializeBasedFramingProtocol()
@@ -41,12 +40,7 @@ class RpcFactory
     }
 
     /**
-     * Creates a new RPC instance with custom streams and handlers.
-     *
-     * @param ReadableStreamInterface $inputStream The stream to read messages from
-     * @param WritableStreamInterface $outputStream The stream to write messages to
-     * @param HandlerInterface[] $handlers Handlers to register with the dispatcher
-     * @return RpcInterface
+     * @inheritDoc
      */
     public function createStreamRpc(
         ReadableStreamInterface $inputStream,

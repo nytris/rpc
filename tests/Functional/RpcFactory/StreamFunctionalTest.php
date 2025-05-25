@@ -11,7 +11,7 @@
 
 declare(strict_types=1);
 
-namespace Nytris\Rpc\Tests\Functional;
+namespace Nytris\Rpc\Tests\Functional\RpcFactory;
 
 use BadMethodCallException;
 use Nytris\Rpc\Exception\ProxyException;
@@ -26,13 +26,13 @@ use Tasque\EventLoop\TasqueEventLoop;
 use Throwable;
 
 /**
- * Class RpcFactoryFunctionalTest.
+ * Class StreamFunctionalTest.
  *
  * Tests RPC flow from end to end using a stream transport.
  *
  * @author Dan Phillimore <dan@ovms.co>
  */
-class RpcFactoryStreamFunctionalTest extends AbstractTestCase
+class StreamFunctionalTest extends AbstractTestCase
 {
     private RpcInterface $clientRpc;
     private RpcFactory $factory;

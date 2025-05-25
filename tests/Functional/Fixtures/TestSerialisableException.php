@@ -17,9 +17,7 @@ use Nytris\Rpc\Exception\SerialisableExceptionInterface;
 use RuntimeException;
 
 /**
- * Class RpcFactoryFunctionalTest.
- *
- * Tests RPC flow from end to end using a stream transport.
+ * Class TestSerialisableException.
  *
  * @author Dan Phillimore <dan@ovms.co>
  */
